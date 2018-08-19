@@ -33,7 +33,7 @@ public class Factory {
         //unload(utility);
     }
     public boolean init(Utility utility){
-        if(unit.health() < 300){
+        if(unit.structureIsBuilt() == 0){
             System.out.println(unit.id()+" not built? "+unit.health());
             if(!utility.unbuilt.contains(unit.id())){
                 utility.unbuilt.add(unit.id());
@@ -56,7 +56,6 @@ public class Factory {
         System.out.println(unit.id() + " number has " + units.size() + " number of units in garrison");
 
         if(units.size() > 0){
-            //for (int i = 0; i < units.size(); i++) {
                 try{
                     MapLocation aux = utility.getOpen(unit);
 
@@ -65,19 +64,13 @@ public class Factory {
                     if(direction == null){
                         direction = utility.compass[utility.random.nextInt(utility.compass.length)];
                     }
-                    int count = 0;
-                    while(!controller.canUnload(unit.id(), direction)) {
-                        direction = utility.compass[count];
 
-                        if(count++ > utility.compass.length)break;
+                    if(controller.canUnload(unit.id(),direction)){
+                        controller.unload(unit.id(),direction);
                     }
-                    controller.unload(unit.id(), direction);
-                    //System.out.println("unloaded a unit in " + direction);
-                    //break;
                 }catch(Exception | UnknownError e){
                     System.out.println("problems unloading");
                 }
-            //}
         }
 
         if(!utility.buildOrders.get(unit.id()).isEmpty()){

@@ -23,11 +23,14 @@ public class Ranger {
         init(utility);
 
         if(!unit.location().isInGarrison() && !unit.location().isInSpace()){
-
-            if(!utility.isSafe(unit)){
+            VecUnit units = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.opp);
+            if(units.size() > 0){
                 utility.tagEnemies(unit);
                 Unit opp = utility.closestEnemy(unit);
-                fight(opp,utility);
+
+                if(opp != null){
+                    fight(opp,utility);
+                }
             }else{
                 findNextMove(utility);
             }
@@ -50,26 +53,46 @@ public class Ranger {
             }
         }
     }
+
     public void fight(Unit enemy,Utility utility){
-        if(unit.location().mapLocation().isWithinRange(unit.attackRange(),enemy.location().mapLocation())){
-            if(!unit.location().mapLocation().isWithinRange(10,enemy.location().mapLocation())){
-                if(controller.canBeginSnipe(unit.id(),enemy.location().mapLocation())){
-                    controller.beginSnipe(unit.id(),enemy.location().mapLocation());
-                }
-                if(controller.isAttackReady(unit.id()) && controller.canAttack(unit.id(),enemy.id())){
-                    controller.attack(unit.id(),enemy.id());
-                    System.out.println("RANGER ATTACKED");
-                }
-            }else{
-                Direction dir = unit.location().mapLocation().directionTo(enemy.location().mapLocation());
-                dir = bc.bcDirectionOpposite(dir);
-                MapLocation loc = unit.location().mapLocation().add(dir);
-                utility.move(unit,loc);
+        System.out.println("RANGER TRYING TO FIGHT");
+
+        microMove(enemy,utility);
+
+        if(controller.canAttack(unit.id(),enemy.id()) && unit.attackHeat() < 10){
+            controller.attack(unit.id(),enemy.id());
+            System.out.println("RANGER ATTACKED");
+        }
+    }
+
+    public void microMove(Unit enemy,Utility utility){
+        long distance = unit.location().mapLocation().distanceSquaredTo(enemy.location().mapLocation());
+
+        Direction dir = unit.location().mapLocation().directionTo(enemy.location().mapLocation());
+        MapLocation loc = unit.location().mapLocation();
+
+        if(distance <= unit.rangerCannotAttackRange()+5){
+            loc.addMultiple(bc.bcDirectionOpposite(bc.bcDirectionRotateLeft(dir)),2);
+        }else{
+            if(distance > unit.attackRange()){
+                loc.addMultiple(bc.bcDirectionRotateRight(dir),2);
             }
         }
+
+        utility.move(unit,loc);
     }
     public void findNextMove(Utility utility){
         if(utility.attackVectors.containsKey(unit.id())) {
+            VecUnit rockets = controller.senseNearbyUnitsByType(unit.location().mapLocation(),unit.visionRange(),UnitType.Rocket);
+            if(rockets.size() > 0){
+                if(rockets.get(0).structureGarrison().size() != rockets.get(0).structureMaxCapacity()){
+                    MapLocation away = rockets.get(0).location().mapLocation();
+                    utility.move(unit,away);
+                }else{
+                    utility.move(unit,rockets.get(0).location().mapLocation());
+                }
+                return;
+            }
             if (!utility.attackVectors.get(unit.id()).isEmpty()) {
                 long elapsed = 0;
                 if (utility.elapsedTime.containsKey(unit.id())) {

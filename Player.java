@@ -13,15 +13,7 @@ public class Player {
 
         Utility utility = new Utility(gc);
 
-        gc.queueResearch(UnitType.Rocket);
-
-        gc.queueResearch(UnitType.Knight);
-        gc.queueResearch(UnitType.Mage);
-        gc.queueResearch(UnitType.Knight);
-
-        gc.queueResearch(UnitType.Mage);
-        gc.queueResearch(UnitType.Mage);
-        gc.queueResearch(UnitType.Mage);
+        utility.setResearch();
 
         while (true) {
             System.out.println("Current round: "+gc.round());
@@ -61,6 +53,8 @@ public class Player {
                         factory.run(utility);
                         break;
                     case Rocket:
+                        Rocket rocket = new Rocket(gc,unit);
+                        rocket.run(utility);
                         break;
                 }
                 utility.roundNum++;

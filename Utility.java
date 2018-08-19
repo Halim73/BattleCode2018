@@ -3,7 +3,10 @@ import java.util.*;
 
 public strictfp class Utility {
     boolean[][] passables;
+    boolean[][]marsPassables;
+
     long[][]earthKarboniteLoc;
+    long[][]marsKarboniteLoc;
 
     public long karbonite;
 
@@ -48,6 +51,7 @@ public strictfp class Utility {
     public HashMap<Integer,Queue<UnitType>>buildOrders;
 
     public HashMap<Integer,Boolean>myFactories;
+    public HashMap<Integer,Boolean>myRockets;
 
     public HashSet<MapLocation>claimedMines;
 
@@ -88,6 +92,7 @@ public strictfp class Utility {
         workerBuilds = new HashMap<>();
 
         myFactories = new HashMap<>();
+        myRockets = new HashMap<>();
 
         myKnights = new HashMap<>();
         knightPaths = new HashMap<>();
@@ -128,6 +133,19 @@ public strictfp class Utility {
                 passables[i][j] = earth.isPassableTerrainAt(loc) != 0;
                 earthKarboniteLoc[i][j] = earth.initialKarboniteAt(loc);
                 //System.out.println(passables[i][j]);
+            }
+        }
+
+        marsPassables = new boolean[(int)mars.getWidth()][(int)mars.getHeight()];
+        marsKarboniteLoc = new long[(int)mars.getWidth()][(int)mars.getHeight()];
+        for(int i=0;i<mars.getWidth();i++){
+            for(int j=0;j<mars.getHeight();j++){
+                MapLocation loc = new MapLocation(mars.getPlanet(),i,j);
+                if(!mars.onMap(loc)){
+                    marsPassables[i][j] = false;
+                }
+                marsPassables[i][j] = mars.isPassableTerrainAt(loc) != 0;
+                marsKarboniteLoc[i][j] = mars.initialKarboniteAt(loc);
             }
         }
 
@@ -175,9 +193,13 @@ public strictfp class Utility {
                     if(!buildOrders.containsKey(units.get(i).id())){
                         Queue<UnitType>toBuild = new LinkedList<>();
                         buildOrders.put(units.get(i).id(),toBuild);
+                        factories++;
                     }
                     break;
                 case Rocket:
+                    if(myRockets.containsKey(units.get(i).id())){
+                        myRockets.put(units.get(i).id(),false);
+                    }
                     break;
                 case Mage:
                     if(!myMages.containsKey(units.get(i).id())){
@@ -358,7 +380,7 @@ public strictfp class Utility {
     }
 
     public float calculateMagePriority(){
-        float need = -.7f;
+        float need = -.8f;
         need += exponentialDecay(myMages.size(),.1);
         need += exponentialIncrease(enemies.size(),4);
         return need;
@@ -373,16 +395,16 @@ public strictfp class Utility {
         return need;
     }
     public float calculateHealPriority(){
-        float need = -.7f;
+        float need = -1f;
         need += sigmoid(enemies.size(),4);
         need += exponentialDecay(myHealers.size(),.5);
         need += decreasingIncrease(healRequests.size(),.75f);
         return need;
     }
     public float calculateRangerPriority(){
-        float need = .5f;
+        float need = .6f;
         need += exponentialDecay(myRangers.size(),.1);
-        need += exponentialIncrease(enemies.size(),2);
+        need += exponentialIncrease(enemies.size(),4);
         return need;
     }
     public MapLocation bestHealLocation(){
@@ -409,6 +431,20 @@ public strictfp class Utility {
             return loc;
         }
         return null;
+    }
+    public MapLocation goodMarsLanding(Unit unit){
+        MapLocation best = null;
+        for(int i=0;i<20;i++){
+            int x = random.nextInt((int)mars.getWidth());
+            int y = random.nextInt((int)mars.getHeight());
+            if(passables[x][y]){
+                best = new MapLocation(mars.getPlanet(),x,y);
+                System.out.println("FOUND MARS LANDING "+best);
+                return best;
+            }
+        }
+        System.out.println("MARS LANDING FAILED "+best);
+        return best;
     }
     public void enumerateOvercharges(Unit unit){
         if(overcharges.containsKey(unit.id())){
@@ -491,13 +527,24 @@ public strictfp class Utility {
     public boolean isSafe(Unit unit){
         VecUnit units = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),opp);
         for(int i=0;i<units.size();i++){
-            if(units.get(i).location().mapLocation().isWithinRange(50,unit.location().mapLocation())){
+            if(units.get(i).location().mapLocation().isWithinRange(unit.visionRange(),unit.location().mapLocation())){
                 return false;
             }
         }
         return true;
     }
 
+    public void setResearch(){
+        controller.queueResearch(UnitType.Ranger);
+
+        controller.queueResearch(UnitType.Rocket);
+        controller.queueResearch(UnitType.Ranger);
+        controller.queueResearch(UnitType.Mage);
+
+        controller.queueResearch(UnitType.Healer);
+        controller.queueResearch(UnitType.Mage);
+        controller.queueResearch(UnitType.Ranger);
+    }
     public void tagEnemies(Unit unit){
         VecUnit seen = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),opp);
 
@@ -518,15 +565,17 @@ public strictfp class Utility {
                toRemove.add(id);
             }
         }
-        for(Integer id:toRemove){
-            enemies.remove(id);
-        }
+
+        enemies.removeAll(toRemove);
     }
     public Unit closestEnemy(Unit unit){
-        long closest = -99999;
+        long closest = 99999;
         Unit best;
 
         VecUnit enemies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),opp);
+
+        if(enemies.size() == 0)return null;
+
         best = enemies.get(0);
 
         for(int i=0;i<enemies.size();i++){
@@ -540,6 +589,9 @@ public strictfp class Utility {
     }
 
     public boolean isPassable(MapLocation loc){
+        if(loc.getPlanet() == mars.getPlanet()){
+            return marsPassables[loc.getX()][loc.getY()];
+        }
         return passables[loc.getX()][loc.getY()];
     }
     public boolean move(Unit unit, MapLocation loc){
@@ -744,6 +796,8 @@ public strictfp class Utility {
         switch (currentStrategy){
             case NEUTRAL:
                 if(unit.location().isOnPlanet(earth.getPlanet())){
+                    if(roundNum > 200)return true;
+
                     if(myFactories.size() < 3){
                         System.out.println("should build");
                         return true;

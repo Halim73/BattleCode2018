@@ -33,24 +33,19 @@ public strictfp class Worker {
         }
     }
     public void runNeutral(Utility utility){
-        init(utility);
+        if(!unit.location().isInSpace() && !unit.location().isInGarrison()){
+            init(utility);
 
-        /*if(!utility.bestRepair(unit,UnitType.Factory)){
-            if(!buildLogic(utility)){
+            if(!utility.workerBuildOrMine(unit)){
                 if(!mineLogic(utility)){
                     utility.wander(unit);
                 }
-            }
-        }*/
-        if(!utility.workerBuildOrMine(unit)){
-            if(!mineLogic(utility)){
-                utility.wander(unit);
-            }
-        }else{
-           if(!utility.bestRepair(unit,UnitType.Factory)){
-                if(!buildLogic(utility)){
-                    if(!mineLogic(utility)){
-                        utility.wander(unit);
+            }else{
+                if(!utility.bestRepair(unit,UnitType.Factory)){
+                    if(!buildLogic(utility)){
+                        if(!mineLogic(utility)){
+                            utility.wander(unit);
+                        }
                     }
                 }
             }
@@ -61,22 +56,46 @@ public strictfp class Worker {
         MapLocation spot = utility.getOpen(unit);
 
         if (spot != null) {
-            utility.blueprint(unit, UnitType.Factory, spot);
+            if(utility.roundNum > 200){
+                utility.blueprint(unit, UnitType.Rocket, spot);
+            }else{
+                utility.blueprint(unit, UnitType.Factory, spot);
+            }
         }
-        if (!utility.unbuilt.isEmpty()) {
-            for(Integer id:utility.unbuilt){
-                MapLocation location = null;
-                if(utility.checkUnitIDExistence(id)){
-                    location = controller.unit(id).location().mapLocation();
-                }
-                if(location != null && unit.location().mapLocation().isWithinRange(unit.visionRange(),location)){
-                    if(utility.build(unit, id)){
-                        replicateNear(utility,location);
-                    }
 
+        VecUnit units = controller.senseNearbyUnitsByType(unit.location().mapLocation(),2,UnitType.Factory);
+        VecUnit rockets = controller.senseNearbyUnitsByType(unit.location().mapLocation(),2,UnitType.Rocket);
+
+        if(utility.roundNum > 200){
+            for(int i=0;i<rockets.size();i++){
+                if(utility.build(unit,rockets.get(i).id())){
+                    replicateNear(utility,rockets.get(i).location().mapLocation());
+                    return true;
+                }
+            }
+
+            for(int i=0;i<units.size();i++){
+                if(utility.build(unit,units.get(i).id())){
+                    replicateNear(utility,units.get(i).location().mapLocation());
+                    return true;
+                }
+            }
+        }else{
+            for(int i=0;i<units.size();i++){
+                if(utility.build(unit,units.get(i).id())){
+                    replicateNear(utility,units.get(i).location().mapLocation());
+                    return true;
+                }
+            }
+
+            for(int i=0;i<rockets.size();i++){
+                if(utility.build(unit,rockets.get(i).id())){
+                    replicateNear(utility,rockets.get(i).location().mapLocation());
+                    return true;
                 }
             }
         }
+
         return false;
     }
     public boolean mineLogic(Utility utility){
@@ -111,7 +130,7 @@ public strictfp class Worker {
     }
     public boolean replicate(Utility utility,Direction direction){
         //if(utility.isSafe(unit)){
-            //if(utility.karbonite >= bc.bcUnitTypeReplicateCost(unit.unitType())){
+            if(utility.karbonite >= bc.bcUnitTypeReplicateCost(unit.unitType())){
                 int count = 0;
                 while(!controller.canReplicate(unit.id(),direction)){
                     direction = utility.compass[utility.random.nextInt(utility.compass.length)];
@@ -127,7 +146,7 @@ public strictfp class Worker {
                     hasReplicated = true;
                     return true;
                 }
-            //}
+            }
         //}
         return false;
     }
@@ -147,7 +166,9 @@ public strictfp class Worker {
             utility.goals.add(enemy.location().mapLocation());
             //return;
         }
-        if(utility.roundNum > 0 && utility.roundNum < 200 && utility.random.nextFloat() < .1){
+        if(/*utility.roundNum > 0 && utility.roundNum < 200 &&*/ utility.random.nextFloat() < .1){
+            //if(utility.factories == 0)return;
+
             boolean condition1 = (utility.roundNum > 50)?(utility.myFactories.size() > 0):true;
             //boolean condition2 = utility.karbonite > bc.bcUnitTypeReplicateCost(UnitType.Worker);
             if(utility.workers < 4){

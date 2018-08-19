@@ -88,6 +88,16 @@ public strictfp class Knight {
         return false;
     }
     public void findNextMove(Utility utility){
+        VecUnit rockets = controller.senseNearbyUnitsByType(unit.location().mapLocation(),unit.visionRange(),UnitType.Rocket);
+        if(rockets.size() > 0){
+            if(rockets.get(0).structureGarrison().size() != rockets.get(0).structureMaxCapacity()){
+                MapLocation away = rockets.get(0).location().mapLocation();
+                utility.move(unit,away);
+            }else{
+                utility.move(unit,rockets.get(0).location().mapLocation());
+            }
+            return;
+        }
         if(utility.attackVectors.containsKey(unit.id())) {
             if (!utility.attackVectors.get(unit.id()).isEmpty()) {
                 long elapsed = 0;
