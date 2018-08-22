@@ -9,50 +9,67 @@ public class Rocket {
     }
 
     public void run(Utility utility){
-        if(unit.location().mapLocation().getPlanet() == utility.earth.getPlanet()){
+        if(unit.location().isOnPlanet(utility.earth.getPlanet())){
             tryToLaunch(utility);
         }else{
             if(!unit.location().isInSpace()){
-                if(unit.structureGarrison().size() > 0){
-                    for(int i=0;i<unit.structureGarrison().size();i++){
-                        if(controller.canLoad(unit.id(),unit.structureGarrison().get(i))){
-                            MapLocation open = utility.getOpen(unit);
-                            Direction toOpen = unit.location().mapLocation().directionTo(open);
-                            controller.unload(unit.id(),toOpen);
-                        }
+                if(!utility.rocketsOnMars.contains(unit.id())){
+                    utility.rocketsOnMars.add(unit.id());
+                }
+
+                if(unit.structureGarrison().size() == 0){
+                    controller.disintegrateUnit(unit.id());
+                    return;
+                }
+
+                try{
+                    MapLocation aux = utility.getOpen(unit);
+
+                    if (unit == null) return;
+                    Direction direction = unit.location().mapLocation().directionTo(aux);
+                    if(direction == null){
+                        direction = utility.compass[utility.random.nextInt(utility.compass.length)];
                     }
+
+                    if(controller.canUnload(unit.id(),direction)){
+                        controller.unload(unit.id(),direction);
+                    }
+                }catch(Exception | UnknownError e){
+                    System.out.println("problems unloading");
                 }
             }
         }
     }
 
     public void tryToLaunch(Utility utility){
-        VecUnit nearbyAllies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),5,utility.ally);
+        VecUnit nearbyAllies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),6,utility.ally);
         if(unit.structureGarrison().size() == unit.structureMaxCapacity()){
             utility.myRockets.replace(unit.id(),true);
         }
         if(nearbyAllies.size() > 0){
             for(int i=0;i<nearbyAllies.size();i++){
-                if(unit.structureGarrison().size() == unit.structureMaxCapacity())break;
-
                 Unit ally = nearbyAllies.get(i);
                 if(controller.canLoad(unit.id(),ally.id())){
                     controller.load(unit.id(),ally.id());
+                    return;
                 }
+                //System.out.println("FAILED TO LOAD "+ally.id()+" UNIT SIZE IS "+unit.structureGarrison().size());
             }
-
         }
-        if(utility.roundNum > 400){
+
+        if(!utility.isSafe(unit) || utility.roundNum > 325){
             if(unit.structureGarrison().size() > 0){
                 MapLocation loc = utility.goodMarsLanding(unit);
                 if(controller.canLaunchRocket(unit.id(),loc)){
                     controller.launchRocket(unit.id(),loc);
+                    utility.myRockets.remove(unit.id());
                 }
             }
-        }else if(unit.structureGarrison().size() == unit.structureMaxCapacity()){
+        }else if(unit.structureGarrison().size() >= 3){
             MapLocation loc = utility.goodMarsLanding(unit);
             if(controller.canLaunchRocket(unit.id(),loc)){
                 controller.launchRocket(unit.id(),loc);
+                utility.myRockets.remove(unit.id());
             }
         }
     }

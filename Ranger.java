@@ -32,7 +32,11 @@ public class Ranger {
                     fight(opp,utility);
                 }
             }else{
-                findNextMove(utility);
+                if(unit.location().isOnPlanet(utility.earth.getPlanet())){
+                    findNextMove(utility);
+                }else{
+                    utility.wander(unit);
+                }
             }
         }
     }
@@ -48,8 +52,8 @@ public class Ranger {
             if (utility.healRequests.containsKey(unit.id())) {
                 utility.healRequests.remove(unit.id());
             }
-            if (utility.myMages.containsKey(unit.id())) {
-                utility.myMages.remove(unit.id());
+            if (utility.myRangers.containsKey(unit.id())) {
+                utility.myRangers.remove(unit.id());
             }
         }
     }
@@ -59,9 +63,18 @@ public class Ranger {
 
         microMove(enemy,utility);
 
-        if(controller.canAttack(unit.id(),enemy.id()) && unit.attackHeat() < 10){
-            controller.attack(unit.id(),enemy.id());
-            System.out.println("RANGER ATTACKED");
+        if(unit.isAbilityUnlocked() == 0){
+            if(unit.abilityHeat() < 10 && controller.isBeginSnipeReady(unit.id())){
+                if(controller.canBeginSnipe(unit.id(),enemy.location().mapLocation())){
+                    controller.beginSnipe(unit.id(),enemy.location().mapLocation());
+                }
+            }
+        }
+        if(controller.isAttackReady(unit.id())){
+            if(controller.canAttack(unit.id(),enemy.id()) && unit.attackHeat() < 10){
+                controller.attack(unit.id(),enemy.id());
+                System.out.println("RANGER ATTACKED");
+            }
         }
     }
 
@@ -71,7 +84,7 @@ public class Ranger {
         Direction dir = unit.location().mapLocation().directionTo(enemy.location().mapLocation());
         MapLocation loc = unit.location().mapLocation();
 
-        if(distance <= unit.rangerCannotAttackRange()+5){
+        if(distance <= unit.rangerCannotAttackRange()+2){
             loc.addMultiple(bc.bcDirectionOpposite(bc.bcDirectionRotateLeft(dir)),2);
         }else{
             if(distance > unit.attackRange()){
@@ -89,7 +102,9 @@ public class Ranger {
                     MapLocation away = rockets.get(0).location().mapLocation();
                     utility.move(unit,away);
                 }else{
-                    utility.move(unit,rockets.get(0).location().mapLocation());
+                    if(rockets.get(0).rocketIsUsed() != 0){
+                        utility.move(unit,rockets.get(0).location().mapLocation());
+                    }
                 }
                 return;
             }
@@ -112,6 +127,7 @@ public class Ranger {
                         System.out.println("REASSIGNING VECTOR");
                     }
                     try {
+                        MapLocation goal = utility.findClosestGoal(unit,utility.attackVectors.get(unit.id()));
                         utility.move(unit, utility.attackVectors.get(unit.id()).peek());
 
                     } catch (Exception | UnknownError e) {

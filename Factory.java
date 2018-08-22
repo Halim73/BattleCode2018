@@ -42,6 +42,9 @@ public class Factory {
             }
         }else{
             //System.out.println(unit.id() + " is built " + unit.health());
+            if(unit.health() <= unit.maxHealth()/4){
+                utility.myFactories.remove(unit.id());
+            }
             if (utility.myFactories.containsKey(unit.id())) {
                 utility.myFactories.replace(unit.id(), true);
             } else {
