@@ -9,35 +9,39 @@ public class Rocket {
     }
 
     public void run(Utility utility){
-        if(unit.location().isOnPlanet(utility.earth.getPlanet())){
-            tryToLaunch(utility);
-        }else{
-            if(!unit.location().isInSpace()){
-                if(!utility.rocketsOnMars.contains(unit.id())){
-                    utility.rocketsOnMars.add(unit.id());
-                }
-
-                if(unit.structureGarrison().size() == 0){
-                    controller.disintegrateUnit(unit.id());
-                    return;
-                }
-
-                try{
-                    MapLocation aux = utility.getOpen(unit);
-
-                    if (unit == null) return;
-                    Direction direction = unit.location().mapLocation().directionTo(aux);
-                    if(direction == null){
-                        direction = utility.compass[utility.random.nextInt(utility.compass.length)];
+        try{
+            if(unit.location().isOnPlanet(utility.earth.getPlanet())){
+                tryToLaunch(utility);
+            }else{
+                if(!unit.location().isInSpace()){
+                    if(!utility.rocketsOnMars.contains(unit.id())){
+                        utility.rocketsOnMars.add(unit.id());
                     }
 
-                    if(controller.canUnload(unit.id(),direction)){
-                        controller.unload(unit.id(),direction);
+                    if(unit.structureGarrison().size() == 0){
+                        controller.disintegrateUnit(unit.id());
+                        return;
                     }
-                }catch(Exception | UnknownError e){
-                    System.out.println("problems unloading");
+
+                    try{
+                        MapLocation aux = utility.getOpen(unit);
+
+                        if (unit == null) return;
+                        Direction direction = unit.location().mapLocation().directionTo(aux);
+                        if(direction == null){
+                            direction = utility.compass[utility.random.nextInt(utility.compass.length)];
+                        }
+
+                        if(controller.canUnload(unit.id(),direction)){
+                            controller.unload(unit.id(),direction);
+                        }
+                    }catch(Exception | UnknownError e){
+                        System.out.println("problems unloading");
+                    }
                 }
             }
+        }catch(UnknownError | Exception e){
+            return;
         }
     }
 

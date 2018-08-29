@@ -32,31 +32,43 @@ public strictfp class Worker {
             runNeutral(utility);
         }
     }
+
     public void runNeutral(Utility utility){
         if(!unit.location().isInSpace() && !unit.location().isInGarrison()){
             init(utility);
 
-            if(utility.myFactories.size() == 0){
-                buildLogic(utility);
-                return;
-            }
-
             if(unit.location().isOnPlanet(utility.earth.getPlanet())){
+                if(utility.roundNum <= 25){
+                    if(!buildLogic(utility)){
+                        if(!spontaneousReplicate(utility)){
+                            if(!mineLogic(utility)){
+                                utility.wander(unit);
+                            }
+                        }
+                    }
+                    return;
+                }
+
                 if(!utility.workerBuildOrMine(unit)){
                     if(!mineLogic(utility)){
-                        utility.wander(unit);
+                        if(!spontaneousReplicate(utility)){
+                            utility.wander(unit);
+                        }
                     }
                 }else{
                     if(!utility.bestRepair(unit,UnitType.Factory)){
                         if(!buildLogic(utility)){
                             if(!mineLogic(utility)){
-                                utility.wander(unit);
+                                if(!spontaneousReplicate(utility)){
+                                    utility.wander(unit);
+                                }
                             }
                         }
                     }
                 }
             }else{
                 if(!mineLogic(utility)){
+                    //if(!spontaneousReplicate(utility));
                     utility.wander(unit);
                 }
             }
@@ -64,13 +76,50 @@ public strictfp class Worker {
     }
 
     public boolean buildLogic(Utility utility){
+        VecUnit units = controller.senseNearbyUnitsByType(unit.location().mapLocation(),15,UnitType.Factory);
+        VecUnit rockets = controller.senseNearbyUnitsByType(unit.location().mapLocation(),15,UnitType.Rocket);
+
+        if(utility.roundNum > 300){
+            for(int i=0;i<rockets.size();i++){
+                if(rockets.get(i).structureIsBuilt() != 0)continue;
+                if(utility.build(unit,rockets.get(i).id())){
+                    replicateNear(utility,rockets.get(i).location().mapLocation());
+                    return true;
+                }
+            }
+
+            for(int i=0;i<units.size();i++){
+                //if(units.get(i).structureIsBuilt() != 0)continue;
+                if(utility.build(unit,units.get(i).id())){
+                    replicateNear(utility,units.get(i).location().mapLocation());
+                    return true;
+                }
+            }
+        }else{
+            for(int i=0;i<units.size();i++){
+                //if(units.get(i).structureIsBuilt() != 0)continue;
+                if(utility.build(unit,units.get(i).id())){
+                    replicateNear(utility,units.get(i).location().mapLocation());
+                    return true;
+                }
+            }
+
+            for(int i=0;i<rockets.size();i++){
+                if(rockets.get(i).structureIsBuilt() != 0)continue;
+                if(utility.build(unit,rockets.get(i).id())){
+                    replicateNear(utility,rockets.get(i).location().mapLocation());
+                    return true;
+                }
+            }
+        }
+
         MapLocation spot = utility.getOpen(unit);
 
         if (spot != null) {
-            if(utility.roundNum > 150 && utility.rocketsOnMars.isEmpty()){
+            if(utility.roundNum > 300 && utility.rocketsOnMars.isEmpty()){
                 utility.blueprint(unit, UnitType.Rocket, spot);
             }else{
-                if(utility.myFactories.size() < utility.earth.getInitial_units().size()){
+                if(utility.factories <= utility.workers/2){
                     utility.blueprint(unit, UnitType.Factory, spot);
                 }else{
                     if(utility.rocketsOnMars.size() > 4){
@@ -81,42 +130,9 @@ public strictfp class Worker {
                 }
             }
         }
-
-        VecUnit units = controller.senseNearbyUnitsByType(unit.location().mapLocation(),2,UnitType.Factory);
-        VecUnit rockets = controller.senseNearbyUnitsByType(unit.location().mapLocation(),2,UnitType.Rocket);
-
-        if(utility.roundNum > 200){
-            for(int i=0;i<rockets.size();i++){
-                if(utility.build(unit,rockets.get(i).id())){
-                    replicateNear(utility,rockets.get(i).location().mapLocation());
-                    return true;
-                }
-            }
-
-            for(int i=0;i<units.size();i++){
-                if(utility.build(unit,units.get(i).id())){
-                    replicateNear(utility,units.get(i).location().mapLocation());
-                    return true;
-                }
-            }
-        }else{
-            for(int i=0;i<units.size();i++){
-                if(utility.build(unit,units.get(i).id())){
-                    replicateNear(utility,units.get(i).location().mapLocation());
-                    return true;
-                }
-            }
-
-            for(int i=0;i<rockets.size();i++){
-                if(utility.build(unit,rockets.get(i).id())){
-                    replicateNear(utility,rockets.get(i).location().mapLocation());
-                    return true;
-                }
-            }
-        }
-
         return false;
     }
+
     public boolean mineLogic(Utility utility){
         if(unit.location().isOnPlanet(utility.earth.getPlanet())){
             if(utility.myWorkers.containsKey(unit.id())){
@@ -187,35 +203,70 @@ public strictfp class Worker {
         //}
         return false;
     }
+    public boolean spontaneousReplicate(Utility utility){
+        boolean isStart = utility.roundNum < 25;
 
-    public void init(Utility utility){
-        if(unit.location().isInGarrison())return;
-        if(unit.health() <= 0)return;
+        boolean couldReplicateAgain = (utility.karbonite >= bc.bcUnitTypeReplicateCost(UnitType.Worker))?(utility.myFactories.size() > 0):true;
+        boolean shouldReplicateAgain = (utility.factories > utility.workers/2);
 
-        if(unit.health() <= unit.maxHealth()/4){
-            utility.myWorkers.remove(unit.id());
-        }
-
-        if(!utility.isSafe(unit)){
-            utility.tagEnemies(unit);
-            Unit enemy = utility.closestEnemy(unit);
-            utility.dodge(unit,enemy);
-            utility.goals.add(enemy.location().mapLocation());
-            //return;
-        }
-        if(/*utility.roundNum > 0 && utility.roundNum < 200 &&*/ utility.random.nextFloat() < .025){
-            if(utility.factories == 0)return;
-
-            boolean condition1 = (utility.roundNum > 50)?(utility.myFactories.size() > 0):true;
-            if(utility.workers < 4){
+        if(unit.location().isOnPlanet(utility.earth.getPlanet())){
+            if(isStart || (couldReplicateAgain && shouldReplicateAgain)){
                 MapLocation loc = utility.getOpen(unit);
 
                 if(loc != null){
                     if(!replicate(utility,unit.location().mapLocation().directionTo(loc))){
                         //utility.wander(unit);
+                    }else{
+                        return true;
                     }
                 }
             }
+        }else{
+            MapLocation loc = utility.getOpen(unit);
+
+            if(loc != null){
+                if(!replicate(utility,unit.location().mapLocation().directionTo(loc))){
+                    //utility.wander(unit);
+                }else{
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public void init(Utility utility){
+        if(unit.location().isInGarrison())return;
+        if(unit.health() <= 0)return;
+
+        if(unit.health() < unit.maxHealth() && unit.health() > unit.maxHealth()/3){
+            float priority = utility.healDesire(unit,utility.myHealers.size());
+            if(utility.healRequests.containsKey(unit.id())){
+                utility.healRequests.replace(unit.id(),priority);
+            }else{
+                utility.healRequests.put(unit.id(),priority);
+            }
+        }else{
+            if(utility.healRequests.containsKey(unit.id())){
+                utility.healRequests.remove(unit.id());
+            }
+            if(utility.myWorkers.containsKey(unit.id())){
+                utility.myWorkers.remove(unit.id());
+            }
+        }
+
+        if(!utility.isSafe(unit)){
+            utility.tagEnemies(unit);
+            Unit enemy = utility.closestEnemy(unit);
+            if(enemy != null){
+                utility.dodge(unit,enemy);
+                utility.goals.add(enemy.location().mapLocation());
+            }
+        }
+
+        if(!utility.elapsedTime.containsKey(unit.id())){
+            utility.elapsedTime.put(unit.id(),utility.roundNum);
         }
     }
 }

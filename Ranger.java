@@ -84,11 +84,17 @@ public class Ranger {
         Direction dir = unit.location().mapLocation().directionTo(enemy.location().mapLocation());
         MapLocation loc = unit.location().mapLocation();
 
-        if(distance <= unit.rangerCannotAttackRange()+2){
+        if(distance <= unit.rangerCannotAttackRange()){
             loc.addMultiple(bc.bcDirectionOpposite(bc.bcDirectionRotateLeft(dir)),2);
         }else{
-            if(distance > unit.attackRange()){
+            if(distance > unit.attackRange()-2){
                 loc.addMultiple(bc.bcDirectionRotateRight(dir),2);
+            }else{
+                Unit ally = utility.closesAlly(unit);
+                if(ally != null){
+                    loc.addMultiple(ally.location().mapLocation().directionTo(unit.location().mapLocation()),3);
+                    //loc = loc.subtract(utility.compass[utility.random.nextInt(utility.compass.length-1)]);
+                }
             }
         }
 
@@ -116,9 +122,10 @@ public class Ranger {
                 } else {
                     utility.elapsedTime.put(unit.id(), utility.roundNum);
                 }
+                MapLocation goal = utility.findClosestGoal(unit,utility.attackVectors.get(unit.id()));
 
-                if (unit.location().mapLocation().isWithinRange(unit.visionRange(), utility.attackVectors.get(unit.id()).peek())) {
-                    utility.attackVectors.get(unit.id()).remove();
+                if (unit.location().mapLocation().isWithinRange(unit.visionRange(), goal)) {
+                    utility.attackVectors.get(unit.id()).remove(goal);
                     utility.elapsedTime.replace(unit.id(), utility.roundNum);
                 } else {
                     if (elapsed > 200) {
@@ -127,17 +134,16 @@ public class Ranger {
                         System.out.println("REASSIGNING VECTOR");
                     }
                     try {
-                        MapLocation goal = utility.findClosestGoal(unit,utility.attackVectors.get(unit.id()));
-                        utility.move(unit, utility.attackVectors.get(unit.id()).peek());
-
+                        //utility.move(unit, utility.attackVectors.get(unit.id()).peek());
+                        if(!utility.move(unit,goal)){
+                            utility.wander(unit);
+                        }
                     } catch (Exception | UnknownError e) {
                         return;
                     }
                 }
             } else {
-                for (int i = 0; i < utility.goals.size(); i++) {
-                    utility.attackVectors.get(unit.id()).offer(utility.goals.get(i));
-                }
+                utility.attackVectors.get(unit.id()).addAll(utility.goals);
                 utility.elapsedTime.put(unit.id(), utility.roundNum);
             }
         }

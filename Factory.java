@@ -56,7 +56,7 @@ public class Factory {
     }
     public void unload(Utility utility){
         VecUnitID units = unit.structureGarrison();
-        System.out.println(unit.id() + " number has " + units.size() + " number of units in garrison");
+        //System.out.println(unit.id() + " number has " + units.size() + " number of units in garrison");
 
         if(units.size() > 0){
                 try{
@@ -72,17 +72,17 @@ public class Factory {
                         controller.unload(unit.id(),direction);
                     }
                 }catch(Exception | UnknownError e){
-                    System.out.println("problems unloading");
+                    //System.out.println("problems unloading");
                 }
-        }
-
-        if(!utility.buildOrders.get(unit.id()).isEmpty()){
-            System.out.println(unit.id()+" trying to produce unit");
-            utility.produceUnit(utility.buildOrders.get(unit.id()).remove(),unit);
         }else{
-            determineBuild(utility);
+            if(utility.buildOrders.get(unit.id()).isEmpty()){
+                //System.out.println(unit.id()+" trying to produce unit");
+                determineBuild(utility);
+            }
+            utility.produceUnit(utility.buildOrders.get(unit.id()).remove(),unit);
         }
     }
+
     public void determineBuild(Utility utility){
         final int KNIGHT = 0;
         final int HEALER = 1;
@@ -95,7 +95,7 @@ public class Factory {
                 utility.buildOrders.get(unit.id()).offer(UnitType.Worker);
             }
 
-            while(utility.buildOrders.get(unit.id()).size() < 5){
+            //while(utility.buildOrders.get(unit.id()).size() < 5){
                 priority[KNIGHT] = utility.calculateKnightPriority();
                 priority[HEALER] = utility.calculateHealPriority();
                 priority[MAGE] = utility.calculateMagePriority();
@@ -116,7 +116,7 @@ public class Factory {
                         utility.buildOrders.get(unit.id()).offer(UnitType.Ranger);
                         break;
                 }
-            }
+            //}
         }
     }
 }

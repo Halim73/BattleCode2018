@@ -272,7 +272,7 @@ public strictfp class Utility {
         //System.out.println("utility update complete");
     }
     public MapLocation getOpen(Unit unit){
-        VecMapLocation nearby = controller.allLocationsWithin(unit.location().mapLocation(),unit.visionRange());
+        VecMapLocation nearby = controller.allLocationsWithin(unit.location().mapLocation(),unit.visionRange()/2);
 
         for(int i=0;i<nearby.size();i++){
             if(nearby.get(i).isAdjacentTo(unit.location().mapLocation())){
@@ -394,29 +394,29 @@ public strictfp class Utility {
     }
 
     public float calculateMagePriority(){
-        float need = -.4f;
+        float need = -.5f;
         need += exponentialDecay(myMages.size(),.1);
         need += exponentialIncrease(enemies.size(),4);
         return need;
     }
     public float calculateKnightPriority(){
-        float need = -.3f;
+        float need = -.5f;
         need += exponentialDecay(myKnights.size(),.1);
         need += exponentialIncrease(enemies.size(),4);
 
-        if(controller.researchInfo().getLevel(UnitType.Mage) == 4)need = 0;
+        //if(controller.researchInfo().getLevel(UnitType.Mage) == 4)need = 0;
 
         return need;
     }
     public float calculateHealPriority(){
-        float need = -1f;
+        float need = -.1f;
         need += sigmoid(enemies.size(),4);
         need += exponentialDecay(myHealers.size(),.5);
         need += decreasingIncrease(healRequests.size(),.75f);
         return need;
     }
     public float calculateRangerPriority(){
-        float need = .8f;
+        float need = .5f;
         need += exponentialDecay(myRangers.size(),.1);
         need += exponentialIncrease(enemies.size(),4);
         return need;
@@ -492,6 +492,7 @@ public strictfp class Utility {
                 best = loc;
             }
         }
+        //System.out.println("FOUND CLOSEST GOAL "+best);
         return best;
     }
     public void enumerateOvercharges(Unit unit){
@@ -559,7 +560,7 @@ public strictfp class Utility {
         VecMapLocation adj = controller.allLocationsWithin(unit.location().mapLocation(),unit.visionRange());
         Queue<MapLocation>ret = new LinkedList<>();
 
-        long min = 5;
+        long min = 0;
         for(int i=0;i<adj.size();i++){
             if(claimedMines.contains(adj.get(i)))continue;
             if(controller.karboniteAt(adj.get(i)) == 0)continue;
@@ -597,12 +598,12 @@ public strictfp class Utility {
     public void setResearch(){
         controller.queueResearch(UnitType.Ranger);
 
-        controller.queueResearch(UnitType.Rocket);
+        controller.queueResearch(UnitType.Knight);
         controller.queueResearch(UnitType.Ranger);
-        controller.queueResearch(UnitType.Mage);
+        controller.queueResearch(UnitType.Rocket);
 
+        controller.queueResearch(UnitType.Knight);
         controller.queueResearch(UnitType.Healer);
-        controller.queueResearch(UnitType.Mage);
         controller.queueResearch(UnitType.Ranger);
     }
     public void tagEnemies(Unit unit){
@@ -629,10 +630,14 @@ public strictfp class Utility {
         enemies.removeAll(toRemove);
     }
     public Unit closestEnemy(Unit unit){
-        long closest = 99999;
+        long closest = unit.visionRange();
         Unit best;
 
-        VecUnit enemies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),opp);
+        long range = unit.visionRange();
+        if(unit.unitType() == UnitType.Worker){
+            range /= 2;
+        }
+        VecUnit enemies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),range,opp);
 
         if(enemies.size() == 0)return null;
 
@@ -640,8 +645,27 @@ public strictfp class Utility {
 
         for(int i=0;i<enemies.size();i++){
             long distance = unit.location().mapLocation().distanceSquaredTo(enemies.get(i).location().mapLocation());
-            if(distance < closest){
+            if(distance <= closest){
                 best = enemies.get(i);
+                closest = distance;
+            }
+        }
+        return best;
+    }
+    public Unit closesAlly(Unit unit){
+        long closest = unit.visionRange();
+        Unit best;
+
+        VecUnit allies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),ally);
+
+        if(allies.size() == 0)return null;
+
+        best = allies.get(0);
+
+        for(int i=0;i<allies.size();i++){
+            long distance = unit.location().mapLocation().distanceSquaredTo(allies.get(i).location().mapLocation());
+            if(distance <= closest){
+                best = allies.get(i);
                 closest = distance;
             }
         }
@@ -668,13 +692,13 @@ public strictfp class Utility {
                 if(!controller.canMove(unit.id(),dir)){
                     if(!controller.canMove(unit.id(),lastWorkingDirection.get(unit.id()))){
                         while (!controller.canMove(unit.id(),dir)) {
-                            if (check%3 == 0) {
+                            if (check%2 == 0) {
                                 dir = bc.bcDirectionRotateLeft(dir);
                             } else {
                                 dir = bc.bcDirectionRotateRight(dir);
                             }
                             lastWorkingDirection.replace(unit.id(),dir);
-                            if (check++ == 16) {
+                            if (check++ == 8) {
                                 //dir = lastWorkingDirection.get(unit.id());
                                 return false;
                             }
@@ -705,22 +729,18 @@ public strictfp class Utility {
         Direction to = unit.location().mapLocation().directionTo(enemy.location().mapLocation());
         Direction from = enemy.location().mapLocation().directionTo(unit.location().mapLocation());
 
-        if(unit.unitType() == UnitType.Factory)return;
-        if(unit.unitType() == UnitType.Worker)return;
-        if(enemy.damage() == 0)return;
+        if(enemy.unitType() == UnitType.Factory)return;
+        if(enemy.unitType() == UnitType.Worker)return;
+        if(enemy.unitType() != UnitType.Worker && enemy.damage() == 0)return;
 
-        VecMapLocation nearbySpots = controller.allLocationsWithin(unit.location().mapLocation(),10);
         VecMapLocation nearbyDodge = controller.allLocationsWithin(unit.location().mapLocation(),unit.visionRange()/2);
 
-        long furthest = 0;
+        long furthest = -1;
         MapLocation best = nearbyDodge.get(0);
 
         for(int i=0;i<nearbyDodge.size();i++){
-            for(int j=0;j<nearbySpots.size();j++){
-                if(nearbySpots.get(j).equals(nearbyDodge.get(i)))continue;
-            }
             long distance = nearbyDodge.get(i).distanceSquaredTo(best);
-            if(distance < furthest){
+            if(distance > furthest){
                 furthest = distance;
                 best = nearbyDodge.get(i);
             }
@@ -858,15 +878,23 @@ public strictfp class Utility {
                 if(unit.location().isOnPlanet(earth.getPlanet())){
                     if(roundNum > 200 && rocketsOnMars.isEmpty())return true;
 
-                    if(myFactories.size() < 3){
-                        System.out.println("should build");
+                    if(myFactories.size() < myWorkers.size()/4){
+                        //System.out.println("should build");
                         return true;
                     }
+
+                    /*VecUnit workers = controller.senseNearbyUnitsByType(unit.location().mapLocation(),5,UnitType.Worker);
+                    if(karbonite > 200 && workers.size() > 3){
+                        return true;
+                    }*/
+
                     if(karbonite < 200 ){
+                        if(roundNum > 200 && karbonite >= bc.bcUnitTypeBlueprintCost(UnitType.Rocket))return true;
+
                         return false;
                     }
                     if(!workerShouldBuild(unit)){
-                        return myFactories.size() <= goals.size();
+                        return myFactories.size() <= myWorkers.size()/4;
                     }
                     return true;
                 }
@@ -961,12 +989,12 @@ public strictfp class Utility {
             if(controller.isHealReady(unit.id())){
                 if(controller.canHeal(unit.id(),toHeal.id())){
                     controller.heal(unit.id(),toHeal.id());
-                    System.out.println("HEALER HEALED "+toHeal.id());
+                    //System.out.println("HEALER HEALED "+toHeal.id());
                     return true;
                 }
             }
         }
-        System.out.println("HEALER HEAL FAILED");
+        //System.out.println("HEALER HEAL FAILED");
         return false;
     }
 }

@@ -18,6 +18,7 @@ public strictfp class Mage {
             runNeutral(utility);
         }
     }
+
     public void runNeutral(Utility utility){
         init(utility);
 
@@ -28,10 +29,15 @@ public strictfp class Mage {
                 Unit opp = utility.closestEnemy(unit);
                 fight(opp,utility);
             }else{
-                findNextMove(utility);
+                if(unit.location().isOnPlanet(utility.earth.getPlanet())){
+                    findNextMove(utility);
+                }else{
+                    utility.wander(unit);
+                }
             }
         }
     }
+
     public void init(Utility utility) {
         if (unit.health() < unit.maxHealth() && unit.health() > unit.maxHealth() / 3) {
             float priority = utility.healDesire(unit, utility.myHealers.size());
@@ -49,6 +55,24 @@ public strictfp class Mage {
             }
         }
     }
+    public void microMove(Unit enemy,Utility utility){
+        long distance = unit.location().mapLocation().distanceSquaredTo(enemy.location().mapLocation());
+
+        Direction dir = unit.location().mapLocation().directionTo(enemy.location().mapLocation());
+        MapLocation loc = unit.location().mapLocation();
+
+        if(distance <= enemy.attackRange()/2){
+            loc.addMultiple(bc.bcDirectionOpposite(bc.bcDirectionRotateLeft(dir)),2);
+        }else{
+            if(distance > unit.attackRange()-2){
+                loc.addMultiple(bc.bcDirectionRotateRight(dir),2);
+            }else{
+                loc.addMultiple(utility.compass[utility.random.nextInt(utility.compass.length)],2);
+            }
+        }
+
+        utility.move(unit,loc);
+    }
     public void fight(Unit enemy,Utility utility){
         if(unit.location().mapLocation().isWithinRange(unit.attackRange(),enemy.location().mapLocation())){
             if(!unit.location().mapLocation().isAdjacentTo(enemy.location().mapLocation())){
@@ -65,7 +89,7 @@ public strictfp class Mage {
                 dir = bc.bcDirectionRotateRight(dir);
                 MapLocation loc = unit.location().mapLocation().addMultiple(dir,3);
                 if(!blink(loc)){
-                    utility.move(unit,loc);
+                    microMove(enemy,utility);
                 }
             }
         }

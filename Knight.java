@@ -42,7 +42,11 @@ public strictfp class Knight {
                 Unit opp = utility.closestEnemy(unit);
                 fight(opp,utility);
             }else{
-                findNextMove(utility);
+                if(unit.location().isOnPlanet(utility.earth.getPlanet())){
+                    findNextMove(utility);
+                }else{
+                    utility.wander(unit);
+                }
             }
         }
     }
@@ -124,9 +128,7 @@ public strictfp class Knight {
                     }
                 }
             } else {
-                for (int i = 0; i < utility.goals.size(); i++) {
-                    utility.attackVectors.get(unit.id()).offer(utility.goals.get(i));
-                }
+                utility.attackVectors.get(unit.id()).addAll(utility.goals);
                 utility.elapsedTime.put(unit.id(), utility.roundNum);
             }
         }
