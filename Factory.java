@@ -21,9 +21,9 @@ public class Factory {
     }
 
     public void run(Utility utility){
-        if(utility.currentStrategy == NEUTRAL){
+        //if(utility.currentStrategy == NEUTRAL){
             runNeutral(utility);
-        }
+        //}
     }
 
     public void runNeutral(Utility utility){
@@ -60,8 +60,8 @@ public class Factory {
 
         if(units.size() > 0){
                 try{
-                    MapLocation aux = utility.getOpen(unit);
-
+                    //MapLocation aux = utility.getOpen(unit);
+                    MapLocation aux = utility.goals.get(utility.random.nextInt(utility.goals.size()));
                     if (unit == null) return;
                     Direction direction = unit.location().mapLocation().directionTo(aux);
                     if(direction == null){
@@ -77,7 +77,18 @@ public class Factory {
         }else{
             if(utility.buildOrders.get(unit.id()).isEmpty()){
                 //System.out.println(unit.id()+" trying to produce unit");
-                determineBuild(utility);
+                if(utility.currentStrategy == NEUTRAL){
+                    determineBuild(utility);
+                }else if(utility.currentStrategy == RUSH){
+                    utility.buildOrders.get(unit.id()).offer(UnitType.Mage);
+                    utility.buildOrders.get(unit.id()).offer(UnitType.Ranger);
+                    if(utility.myRangers.size() > 2 || utility.myMages.size() > 2){
+                        utility.buildOrders.get(unit.id()).offer(UnitType.Healer);
+                    }
+                    //utility.buildOrders.get(unit.id()).offer(UnitType.Knight);
+                    //utility.buildOrders.get(unit.id()).offer(UnitType.Ranger);
+                    //utility.produceUnit(UnitType.Ranger,unit);
+                }
             }
             utility.produceUnit(utility.buildOrders.get(unit.id()).remove(),unit);
         }

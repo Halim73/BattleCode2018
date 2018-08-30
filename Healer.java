@@ -20,9 +20,9 @@ public class Healer {
     }
 
     public void run(Utility utility){
-        if(utility.currentStrategy == NEUTRAL){
+        //if(utility.currentStrategy == NEUTRAL){
             runNeutral(utility);
-        }
+        //}
     }
 
     public void runNeutral(Utility utility){
@@ -32,13 +32,13 @@ public class Healer {
                 utility.enumerateOvercharges(unit);
             }
 
-            //if(!vectorHeal(utility)){
+            if(!vectorHeal(utility)){
                 if(!generalHeal(utility)){
-                    if(!utility.move(unit,utility.goals.getFirst())){
+                    //if(!utility.move(unit,utility.goals.getFirst())){
                         utility.wander(unit);
-                    }
+                    //}
                 }
-            //}
+            }
         }
     }
 

@@ -14,11 +14,66 @@ public strictfp class Mage {
         controller = gc;
     }
     public void run(Utility utility){
-        if(utility.currentStrategy == NEUTRAL){
-            runNeutral(utility);
+        if(!unit.location().isInSpace() && !unit.location().isInGarrison()){
+            VecUnit rockets = controller.senseNearbyUnitsByType(unit.location().mapLocation(),unit.visionRange(),UnitType.Rocket);
+            if(rockets.size() > 0){
+                if(rockets.get(0).structureGarrison().size() != rockets.get(0).structureMaxCapacity()){
+                    MapLocation away = rockets.get(0).location().mapLocation();
+                    utility.move(unit,away);
+                }else{
+                    utility.move(unit,rockets.get(0).location().mapLocation());
+                }
+                return;
+            }
+        }
+
+        switch(utility.currentStrategy){
+            case NEUTRAL:
+                runNeutral(utility);
+                break;
+            case RUSH:
+                runRush(utility);
+                break;
+            case HEAVY:
+                break;
         }
     }
 
+    public void runRush(Utility utility){
+        if(!unit.location().isInGarrison() && !unit.location().isInSpace()){
+            init(utility);
+
+            VecUnit units = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.opp);
+            if(units.size() > 0){
+                utility.tagEnemies(unit);
+                Unit opp = utility.closestEnemy(unit);
+
+                if(opp != null){
+                    fight(opp,utility);
+                }
+            }else{
+                if(unit.location().isOnPlanet(utility.earth.getPlanet())){
+                    if(utility.attackVectors.containsKey(unit.id())){
+                        MapLocation toGo = utility.attackVectors.get(unit.id()).peek();
+                        Unit enemy = utility.closestEnemy(unit);
+                        if(enemy != null){
+                            toGo = enemy.location().mapLocation();
+                        }
+
+                        if(utility.move(unit,toGo)){
+                            if(unit.location().mapLocation().isWithinRange(20,toGo)){
+                                utility.attackVectors.get(unit.id()).remove();
+                            }
+                        }else{
+                            utility.wander(unit);
+                        }
+                    }
+                }else{
+                    utility.wander(unit);
+                }
+            }
+        }
+    }
     public void runNeutral(Utility utility){
         init(utility);
 
@@ -61,17 +116,31 @@ public strictfp class Mage {
         Direction dir = unit.location().mapLocation().directionTo(enemy.location().mapLocation());
         MapLocation loc = unit.location().mapLocation();
 
-        if(distance <= enemy.attackRange()/2){
-            loc.addMultiple(bc.bcDirectionOpposite(bc.bcDirectionRotateLeft(dir)),2);
-        }else{
-            if(distance > unit.attackRange()-2){
-                loc.addMultiple(bc.bcDirectionRotateRight(dir),2);
+        if(utility.currentStrategy == NEUTRAL){
+            if(distance <= enemy.attackRange()/2){
+                loc.addMultiple(bc.bcDirectionOpposite(bc.bcDirectionRotateLeft(dir)),2);
             }else{
-                loc.addMultiple(utility.compass[utility.random.nextInt(utility.compass.length)],2);
+                if(distance > unit.attackRange()-2){
+                    loc.addMultiple(bc.bcDirectionRotateRight(dir),2);
+                }else{
+                    loc.addMultiple(utility.compass[utility.random.nextInt(utility.compass.length)],2);
+                }
+            }
+        }else if(utility.currentStrategy == RUSH){
+            long distanceToEnemy = unit.location().mapLocation().distanceSquaredTo(enemy.location().mapLocation());
+
+            if(distanceToEnemy > unit.attackRange()){
+                loc = enemy.location().mapLocation();
+
+            } else if(distanceToEnemy < unit.attackRange()){
+                Direction direction = unit.location().mapLocation().directionTo(enemy.location().mapLocation());
+                loc = unit.location().mapLocation().subtract(direction);
             }
         }
 
-        utility.move(unit,loc);
+        if(!utility.move(unit,loc)){
+            utility.wander(unit);
+        }
     }
     public void fight(Unit enemy,Utility utility){
         if(unit.location().mapLocation().isWithinRange(unit.attackRange(),enemy.location().mapLocation())){

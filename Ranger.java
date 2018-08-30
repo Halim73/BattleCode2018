@@ -15,10 +15,54 @@ public class Ranger {
         controller = gc;
     }
     public void run(Utility utility){
-        if(utility.currentStrategy == NEUTRAL){
-            runNeutral(utility);
+        try{
+            switch(utility.currentStrategy){
+                case NEUTRAL:
+                    runNeutral(utility);
+                    break;
+                case RUSH:
+                    runRush(utility);
+                    break;
+                case HEAVY:
+                    break;
+            }
+        }catch(Exception | UnknownError e){
+            return;
         }
     }
+
+    public void runRush(Utility utility){
+        if(!unit.location().isInGarrison() && !unit.location().isInSpace()){
+            init(utility);
+
+            VecUnit units = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.opp);
+            if(units.size() > 0){
+                utility.tagEnemies(unit);
+                Unit opp = utility.closestEnemy(unit);
+
+                if(opp != null){
+                    fight(opp,utility);
+                }
+            }else{
+                if(unit.location().isOnPlanet(utility.earth.getPlanet())){
+                    if(utility.attackVectors.containsKey(unit.id())){
+                        MapLocation toGo = utility.attackVectors.get(unit.id()).peek();
+
+                        if(utility.move(unit,toGo)){
+                            if(unit.location().mapLocation().isWithinRange(20,toGo)){
+                                utility.attackVectors.get(unit.id()).remove();
+                            }
+                        }else{
+                            utility.wander(unit);
+                        }
+                    }
+                }else{
+                    utility.wander(unit);
+                }
+            }
+        }
+    }
+
     public void runNeutral(Utility utility){
         init(utility);
 
@@ -84,21 +128,35 @@ public class Ranger {
         Direction dir = unit.location().mapLocation().directionTo(enemy.location().mapLocation());
         MapLocation loc = unit.location().mapLocation();
 
-        if(distance <= unit.rangerCannotAttackRange()){
-            loc.addMultiple(bc.bcDirectionOpposite(bc.bcDirectionRotateLeft(dir)),2);
-        }else{
-            if(distance > unit.attackRange()-2){
-                loc.addMultiple(bc.bcDirectionRotateRight(dir),2);
+        if(utility.currentStrategy == NEUTRAL){
+            if(distance <= unit.rangerCannotAttackRange()){
+                loc.addMultiple(bc.bcDirectionOpposite(bc.bcDirectionRotateLeft(dir)),2);
             }else{
-                Unit ally = utility.closesAlly(unit);
-                if(ally != null){
-                    loc.addMultiple(ally.location().mapLocation().directionTo(unit.location().mapLocation()),3);
-                    //loc = loc.subtract(utility.compass[utility.random.nextInt(utility.compass.length-1)]);
+                if(distance > unit.attackRange()-2){
+                    loc.addMultiple(bc.bcDirectionRotateRight(dir),2);
+                }else{
+                    Unit ally = utility.closesAlly(unit);
+                    if(ally != null){
+                        loc.addMultiple(ally.location().mapLocation().directionTo(unit.location().mapLocation()),3);
+                        //loc = loc.subtract(utility.compass[utility.random.nextInt(utility.compass.length-1)]);
+                    }
                 }
+            }
+        }else if(utility.currentStrategy == RUSH){
+            long distanceToEnemy = unit.location().mapLocation().distanceSquaredTo(enemy.location().mapLocation());
+
+            if(distanceToEnemy > unit.attackRange()){
+                loc = enemy.location().mapLocation();
+
+            } else if(distanceToEnemy < unit.attackRange()){
+                Direction direction = unit.location().mapLocation().directionTo(enemy.location().mapLocation());
+                loc = unit.location().mapLocation().subtract(direction);
             }
         }
 
-        utility.move(unit,loc);
+        if(!utility.move(unit,loc)){
+            utility.wander(unit);
+        }
     }
     public void findNextMove(Utility utility){
         if(utility.attackVectors.containsKey(unit.id())) {

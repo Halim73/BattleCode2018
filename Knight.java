@@ -25,8 +25,47 @@ public strictfp class Knight {
     }
 
     public void run(Utility utility){
-        if(utility.currentStrategy == NEUTRAL){
-            runNeutral(utility);
+        switch(utility.currentStrategy){
+            case NEUTRAL:
+                runNeutral(utility);
+                break;
+            case RUSH:
+                runRush(utility);
+                break;
+            case HEAVY:
+                break;
+        }
+    }
+
+    public void runRush(Utility utility){
+        if(!unit.location().isInGarrison() && !unit.location().isInSpace()){
+            init(utility);
+
+            VecUnit units = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.opp);
+            if(units.size() > 0){
+                utility.tagEnemies(unit);
+                Unit opp = utility.closestEnemy(unit);
+
+                if(opp != null){
+                    fight(opp,utility);
+                }
+            }else{
+                if(unit.location().isOnPlanet(utility.earth.getPlanet())){
+                    if(utility.attackVectors.containsKey(unit.id())){
+                        MapLocation toGo = utility.attackVectors.get(unit.id()).peek();
+
+                        if(utility.move(unit,toGo)){
+                            if(unit.location().mapLocation().isWithinRange(20,toGo)){
+                                utility.attackVectors.get(unit.id()).remove();
+                            }
+                        }else{
+                            utility.wander(unit);
+                        }
+                    }
+                }else{
+                    utility.wander(unit);
+                }
+            }
         }
     }
     public void runNeutral(Utility utility){
