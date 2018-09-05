@@ -50,27 +50,33 @@ public class Factory {
             } else {
                 utility.myFactories.put(unit.id(), true);
             }
-            utility.unbuilt.remove(unit.location());
+            if(utility.unbuilt.contains(unit.id())){
+                utility.unbuilt.remove(unit.id());
+            }
         }
         return true;
     }
     public void unload(Utility utility){
         VecUnitID units = unit.structureGarrison();
         //System.out.println(unit.id() + " number has " + units.size() + " number of units in garrison");
+        int numToHold = utility.currentStrategy == HEAVY?3:0;
 
         if(units.size() > 0){
                 try{
-                    //MapLocation aux = utility.getOpen(unit);
                     MapLocation aux = utility.goals.get(utility.random.nextInt(utility.goals.size()));
                     if (unit == null) return;
                     Direction direction = unit.location().mapLocation().directionTo(aux);
                     if(direction == null){
                         direction = utility.compass[utility.random.nextInt(utility.compass.length)];
                     }
-
-                    if(controller.canUnload(unit.id(),direction)){
-                        controller.unload(unit.id(),direction);
+                    for(int i=0;i<5;i++){
+                        if(controller.canUnload(unit.id(),direction)){
+                            controller.unload(unit.id(),direction);
+                            break;
+                        }
+                        direction = utility.compass[i];
                     }
+
                 }catch(Exception | UnknownError e){
                     //System.out.println("problems unloading");
                 }
@@ -85,9 +91,17 @@ public class Factory {
                     if(utility.myRangers.size() > 2 || utility.myMages.size() > 2){
                         utility.buildOrders.get(unit.id()).offer(UnitType.Healer);
                     }
-                    //utility.buildOrders.get(unit.id()).offer(UnitType.Knight);
-                    //utility.buildOrders.get(unit.id()).offer(UnitType.Ranger);
-                    //utility.produceUnit(UnitType.Ranger,unit);
+                }else if(utility.currentStrategy == HEAVY){
+                    if(utility.myRangers.size() > 4){
+                        float ratio = utility.myRangers.size()/(utility.myHealers.size()+1);
+                        if(ratio < 1/6){
+                            utility.buildOrders.get(unit.id()).offer(UnitType.Healer);
+                        }
+                    }
+                    if(utility.roundNum > 300 ){
+                        utility.buildOrders.get(unit.id()).offer(UnitType.Mage);
+                    }
+                    utility.buildOrders.get(unit.id()).offer(UnitType.Ranger);
                 }
             }
             utility.produceUnit(utility.buildOrders.get(unit.id()).remove(),unit);

@@ -69,7 +69,7 @@ public class Rocket {
                     utility.myRockets.remove(unit.id());
                 }
             }
-        }else if(unit.structureGarrison().size() >= 3){
+        }else if(unit.structureGarrison().size() >= 4){
             MapLocation loc = utility.goodMarsLanding(unit);
             if(controller.canLaunchRocket(unit.id(),loc)){
                 controller.launchRocket(unit.id(),loc);

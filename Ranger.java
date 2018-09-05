@@ -24,6 +24,7 @@ public class Ranger {
                     runRush(utility);
                     break;
                 case HEAVY:
+                    runHeavy(utility);
                     break;
             }
         }catch(Exception | UnknownError e){
@@ -36,6 +37,10 @@ public class Ranger {
             init(utility);
 
             VecUnit units = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.opp);
+            VecUnit allies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.ally);
+
+            if(allies.size() > 10)utility.spreadOut(unit);
+
             if(units.size() > 0){
                 utility.tagEnemies(unit);
                 Unit opp = utility.closestEnemy(unit);
@@ -62,12 +67,15 @@ public class Ranger {
             }
         }
     }
-
     public void runNeutral(Utility utility){
         init(utility);
 
         if(!unit.location().isInGarrison() && !unit.location().isInSpace()){
             VecUnit units = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.opp);
+            VecUnit allies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange()/2,utility.ally);
+
+            if(allies.size() > 10)utility.spreadOut(unit);
+
             if(units.size() > 0){
                 utility.tagEnemies(unit);
                 Unit opp = utility.closestEnemy(unit);
@@ -84,6 +92,65 @@ public class Ranger {
             }
         }
     }
+    public void runHeavy(Utility utility){
+        if(!unit.location().isInGarrison() && !unit.location().isInSpace()){
+            init(utility);
+
+            VecUnit units = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.opp);
+            VecUnit allies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.ally);
+
+            if(allies.size() > 10)utility.spreadOut(unit);
+
+            if(units.size() > 0){
+                utility.tagEnemies(unit);
+                Unit opp = utility.closestEnemy(unit);
+
+                if(opp != null){
+                    fight(opp,utility);
+                }
+            }else{
+                if(unit.location().isOnPlanet(utility.earth.getPlanet())){
+                    if(utility.attackVectors.containsKey(unit.id())){
+                        MapLocation toGo = utility.attackVectors.get(unit.id()).peek();
+                        int numAllies = 0;
+
+                        MapLocation waitingZone = unit.location().mapLocation();
+                        Unit squadMate = utility.closesAlly(unit);
+                        if(squadMate != null){
+                            waitingZone = squadMate.location().mapLocation();
+                        }
+
+                        for(int i=0;i<allies.size();i++){
+                            Unit ally = allies.get(i);
+                            if(ally.unitType() == UnitType.Factory){
+                                waitingZone = ally.location().mapLocation();
+                            }
+                            if(ally.unitType() == UnitType.Worker || ally.unitType() == UnitType.Factory || ally.unitType() == UnitType.Rocket)continue;
+                            numAllies++;
+                        }
+
+                        if(numAllies < 1){
+                            Direction toWait = bc.bcDirectionRotateLeft(waitingZone.directionTo(unit.location().mapLocation()));
+                            waitingZone.addMultiple(toWait,9);
+                            if(!utility.move(unit,waitingZone)){
+
+                            }
+                        }else{
+                            if(utility.move(unit,toGo)){
+                                if(unit.location().mapLocation().isWithinRange(20,toGo)){
+                                    if(utility.attackVectors.get(unit.id()).contains(toGo)){
+                                        utility.attackVectors.get(unit.id()).remove();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }else{
+                    utility.wander(unit);
+                }
+            }
+        }
+    }
     public void init(Utility utility) {
         if (unit.health() < unit.maxHealth() && unit.health() > unit.maxHealth() / 3) {
             float priority = utility.healDesire(unit, utility.myHealers.size());
@@ -92,6 +159,12 @@ public class Ranger {
             } else {
                 utility.healRequests.putIfAbsent(unit.id(), priority);
             }
+
+            Unit healer = utility.closestAlly(unit,UnitType.Healer);
+            if(healer != null){
+                utility.move(unit,healer.location().mapLocation());
+            }
+
         } else {
             if (utility.healRequests.containsKey(unit.id())) {
                 utility.healRequests.remove(unit.id());
@@ -103,8 +176,7 @@ public class Ranger {
     }
 
     public void fight(Unit enemy,Utility utility){
-        System.out.println("RANGER TRYING TO FIGHT");
-
+        //System.out.println("RANGER TRYING TO FIGHT");
         microMove(enemy,utility);
 
         if(unit.isAbilityUnlocked() == 0){
@@ -117,7 +189,7 @@ public class Ranger {
         if(controller.isAttackReady(unit.id())){
             if(controller.canAttack(unit.id(),enemy.id()) && unit.attackHeat() < 10){
                 controller.attack(unit.id(),enemy.id());
-                System.out.println("RANGER ATTACKED");
+                //System.out.println("RANGER ATTACKED");
             }
         }
     }
@@ -142,7 +214,7 @@ public class Ranger {
                     }
                 }
             }
-        }else if(utility.currentStrategy == RUSH){
+        }else if(utility.currentStrategy == RUSH || utility.currentStrategy == HEAVY){
             long distanceToEnemy = unit.location().mapLocation().distanceSquaredTo(enemy.location().mapLocation());
 
             if(distanceToEnemy > unit.attackRange()){
@@ -150,7 +222,7 @@ public class Ranger {
 
             } else if(distanceToEnemy < unit.attackRange()){
                 Direction direction = unit.location().mapLocation().directionTo(enemy.location().mapLocation());
-                loc = unit.location().mapLocation().subtract(direction);
+                loc = unit.location().mapLocation().subtract(bc.bcDirectionRotateRight(direction));
             }
         }
 
@@ -192,7 +264,6 @@ public class Ranger {
                         System.out.println("REASSIGNING VECTOR");
                     }
                     try {
-                        //utility.move(unit, utility.attackVectors.get(unit.id()).peek());
                         if(!utility.move(unit,goal)){
                             utility.wander(unit);
                         }

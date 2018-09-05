@@ -26,16 +26,20 @@ public strictfp class Mage {
                 return;
             }
         }
-
-        switch(utility.currentStrategy){
-            case NEUTRAL:
-                runNeutral(utility);
-                break;
-            case RUSH:
-                runRush(utility);
-                break;
-            case HEAVY:
-                break;
+        try{
+            switch(utility.currentStrategy){
+                case NEUTRAL:
+                    runNeutral(utility);
+                    break;
+                case RUSH:
+                    runRush(utility);
+                    break;
+                case HEAVY:
+                    runHeavy(utility);
+                    break;
+            }
+        }catch(UnknownError e){
+            return;
         }
     }
 
@@ -44,6 +48,10 @@ public strictfp class Mage {
             init(utility);
 
             VecUnit units = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.opp);
+            VecUnit allies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.ally);
+
+            if(allies.size() > 10)utility.spreadOut(unit);
+
             if(units.size() > 0){
                 utility.tagEnemies(unit);
                 Unit opp = utility.closestEnemy(unit);
@@ -78,6 +86,9 @@ public strictfp class Mage {
         init(utility);
 
         if(!unit.location().isInGarrison() && !unit.location().isInSpace()){
+            VecUnit allies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.ally);
+
+            if(allies.size() > 10)utility.spreadOut(unit);
 
             if(!utility.isSafe(unit)){
                 utility.tagEnemies(unit);
@@ -86,6 +97,62 @@ public strictfp class Mage {
             }else{
                 if(unit.location().isOnPlanet(utility.earth.getPlanet())){
                     findNextMove(utility);
+                }else{
+                    utility.wander(unit);
+                }
+            }
+        }
+    }
+    public void runHeavy(Utility utility){
+        if(!unit.location().isInGarrison() && !unit.location().isInSpace()){
+            init(utility);
+
+            VecUnit units = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.opp);
+            VecUnit allies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.ally);
+
+            if(allies.size() > 10)utility.spreadOut(unit);
+
+            if(units.size() > 0){
+                utility.tagEnemies(unit);
+                Unit opp = utility.closestEnemy(unit);
+
+                if(opp != null){
+                    fight(opp,utility);
+                }
+            }else{
+                if(unit.location().isOnPlanet(utility.earth.getPlanet())){
+                    if(utility.attackVectors.containsKey(unit.id())){
+                        MapLocation toGo = utility.attackVectors.get(unit.id()).peek();
+                        int numAllies = 0;
+
+                        MapLocation waitingZone = unit.location().mapLocation();
+                        for(int i=0;i<allies.size();i++){
+                            Unit ally = allies.get(i);
+                            if(ally.unitType() == UnitType.Factory){
+                                waitingZone = ally.location().mapLocation();
+                            }
+                            if(ally.unitType() == UnitType.Worker || ally.unitType() == UnitType.Factory || ally.unitType() == UnitType.Rocket)continue;
+                            numAllies++;
+                        }
+
+                        if(numAllies < 2){
+                            Direction toWait = bc.bcDirectionRotateLeft(waitingZone.directionTo(unit.location().mapLocation()));
+                            waitingZone.addMultiple(toWait,9);
+                            if(!utility.move(unit,waitingZone)){
+
+                            }
+                        }else{
+                            if(utility.move(unit,toGo)){
+                                if(unit.location().mapLocation().isWithinRange(20,toGo)){
+                                    if(utility.attackVectors.get(unit.id()).contains(toGo)){
+                                        utility.attackVectors.get(unit.id()).remove();
+                                    }
+                                }
+                            }else{
+                                //utility.wander(unit);
+                            }
+                        }
+                    }
                 }else{
                     utility.wander(unit);
                 }
@@ -101,6 +168,12 @@ public strictfp class Mage {
             } else {
                 utility.healRequests.putIfAbsent(unit.id(), priority);
             }
+
+            Unit healer = utility.closestAlly(unit,UnitType.Healer);
+            if(healer != null){
+                utility.move(unit,healer.location().mapLocation());
+            }
+
         } else {
             if (utility.healRequests.containsKey(unit.id())) {
                 utility.healRequests.remove(unit.id());
@@ -110,6 +183,7 @@ public strictfp class Mage {
             }
         }
     }
+
     public void microMove(Unit enemy,Utility utility){
         long distance = unit.location().mapLocation().distanceSquaredTo(enemy.location().mapLocation());
 
@@ -126,7 +200,7 @@ public strictfp class Mage {
                     loc.addMultiple(utility.compass[utility.random.nextInt(utility.compass.length)],2);
                 }
             }
-        }else if(utility.currentStrategy == RUSH){
+        }else if(utility.currentStrategy == RUSH || utility.currentStrategy == HEAVY){
             long distanceToEnemy = unit.location().mapLocation().distanceSquaredTo(enemy.location().mapLocation());
 
             if(distanceToEnemy > unit.attackRange()){
@@ -134,7 +208,7 @@ public strictfp class Mage {
 
             } else if(distanceToEnemy < unit.attackRange()){
                 Direction direction = unit.location().mapLocation().directionTo(enemy.location().mapLocation());
-                loc = unit.location().mapLocation().subtract(direction);
+                loc = unit.location().mapLocation().add(bc.bcDirectionRotateLeft(direction));
             }
         }
 
@@ -146,7 +220,7 @@ public strictfp class Mage {
         if(unit.location().mapLocation().isWithinRange(unit.attackRange(),enemy.location().mapLocation())){
             if(!unit.location().mapLocation().isAdjacentTo(enemy.location().mapLocation())){
                 if(controller.isAttackReady(unit.id()) && controller.canAttack(unit.id(),enemy.id())){
-                    VecUnit allies = controller.senseNearbyUnitsByTeam(enemy.location().mapLocation(),2,utility.ally);
+                    VecUnit allies = controller.senseNearbyUnitsByTeam(enemy.location().mapLocation(),4,utility.ally);
 
                     if(allies.size() > 3)return;
 
@@ -156,7 +230,7 @@ public strictfp class Mage {
             }else{
                 Direction dir = unit.location().mapLocation().directionTo(enemy.location().mapLocation());
                 dir = bc.bcDirectionRotateRight(dir);
-                MapLocation loc = unit.location().mapLocation().addMultiple(dir,3);
+                MapLocation loc = unit.location().mapLocation().addMultiple(dir,25);
                 if(!blink(loc)){
                     microMove(enemy,utility);
                 }

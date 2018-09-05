@@ -28,8 +28,10 @@ public strictfp class Utility {
     public static final int RANGED = 3;
     public static final int HEAVY = 4;
 
-    public LinkedList<Integer> unbuilt;
+    public HashSet<Integer> unbuilt;
+
     public LinkedList<Integer>rocketsOnMars;
+    public LinkedList<MapLocation>turtleBase;
 
     public Queue<MapLocation>priorityMines;
 
@@ -83,6 +85,7 @@ public strictfp class Utility {
 
     LinkedList<MapLocation> goals;
     LinkedList<MapLocation>marsGoals;
+    LinkedList<MapLocation>allyStartPos;
 
     Team ally;
     Team opp;
@@ -129,6 +132,8 @@ public strictfp class Utility {
 
         goals = new LinkedList<>();
         marsGoals = new LinkedList<>();
+        allyStartPos = new LinkedList<>();
+        turtleBase = new LinkedList<>();
 
         passables = new boolean[(int)earth.getWidth()][(int)earth.getHeight()];
         earthKarboniteLoc = new long[(int)earth.getWidth()][(int)earth.getHeight()];
@@ -182,6 +187,7 @@ public strictfp class Utility {
         for(int i=0;i<temp.size();i++){
             if(temp.get(i).team() == ally){
                 allyStart = temp.get(i).location().mapLocation();
+                allyStartPos.add(allyStart);
             }else{
                 oppStart = temp.get(i).location().mapLocation();
                 goals.add(temp.get(i).location().mapLocation());
@@ -191,10 +197,15 @@ public strictfp class Utility {
         //grid.runBfs(controller,goals.getFirst(),this);
 
         claimedMines = new HashSet<>();
-        unbuilt = new LinkedList<>();
+        unbuilt = new HashSet<>();
 
         setStrategy();
+
+        if(currentStrategy == HEAVY){
+            //planTurtleBase();
+        }
     }
+
     public void updateUtility(){
         VecUnit units = controller.units();
 
@@ -296,6 +307,9 @@ public strictfp class Utility {
         }
         return null;
     }
+    public Direction getRandomDirection(){
+        return compass[random.nextInt(compass.length)];
+    }
 
     public void scannedArea(){
 
@@ -303,17 +317,23 @@ public strictfp class Utility {
     public Stack<MapLocation> path(MapLocation to,MapLocation from){
         Queue<MapLocation>aux  = new LinkedList<>();
         Stack<MapLocation>path  = new Stack<>();
+        if(from.distanceSquaredTo(to) > 400){
+            path.add(to);
+            System.out.println("TOO BIG TO PATH");
+            return path;
+        }
 
         if(earth.getPlanet() == to.getPlanet() && earth.getPlanet() == from.getPlanet()){
             if(earth.onMap(to) && earth.onMap(from)){
                 MapLocation current = from;
-                while(!current.isAdjacentTo(to)){
-                    VecMapLocation adj = controller.allLocationsWithin(current,30);
-                    MapLocation best = adj.get(0);
+
+                while(!current.equals(to)){
+                    VecMapLocation adj = controller.allLocationsWithin(current,2);
+                    MapLocation best = current;
                     for(int i=0;i<adj.size();i++){
                         MapLocation loc = adj.get(i);
 
-                        if(earth.isPassableTerrainAt(loc) == 0)continue;
+                        if(!passables[loc.getX()][loc.getY()])continue;
 
                         if(loc.distanceSquaredTo(to) < best.distanceSquaredTo(to)
                                 && !aux.contains(loc)){
@@ -328,6 +348,7 @@ public strictfp class Utility {
                 }
             }
         }
+        System.out.println("FOUND PATH OF SIZE "+path.size());
         return path;
     }
 
@@ -488,6 +509,51 @@ public strictfp class Utility {
         System.out.println("EARTH LANDING FAILED "+best);
         return best;
     }
+
+    public void planTurtleBase(Unit unit){
+        VecUnit nearbyFactories = controller.senseNearbyUnitsByType(unit.location().mapLocation(),25,UnitType.Factory);
+        MapLocation start = unit.location().mapLocation();
+
+        if(nearbyFactories.size() > 0){
+            start = nearbyFactories.get(0).location().mapLocation();
+        }
+
+        for(int i=0;i<compass.length;i+=2){
+            MapLocation base = start.addMultiple(compass[i],4);
+
+            if(earth.onMap(base)){
+                turtleBase.offer(base);
+                System.out.println("ADDING BASE COMPONENT "+base);
+            }
+        }
+    }
+    public void cleanTurtleBase(){
+        Collection<MapLocation>toRemove = new LinkedList<>();
+
+        for(MapLocation loc:turtleBase){
+            if(controller.hasUnitAtLocation(loc)){
+                if(controller.senseUnitAtLocation(loc).unitType() == UnitType.Factory){
+                    toRemove.add(loc);
+                    System.out.println("REMOVING BASE LOCATION");
+                }
+            }
+        }
+        turtleBase.removeAll(toRemove);
+    }
+    public MapLocation getBaseLoc(Unit unit){
+        long closest = 99999;
+        MapLocation ret = turtleBase.getFirst();
+
+        for(MapLocation loc:turtleBase){
+            long distance = unit.location().mapLocation().distanceSquaredTo(loc);
+            if(distance < closest){
+                closest = distance;
+                ret = loc;
+            }
+        }
+        return ret;
+    }
+
     public void getAsteroidLocations(){
         if(marsAstroids.hasAsteroid(roundNum)){
             MapLocation hit = marsAstroids.asteroid(roundNum).getLocation();
@@ -495,7 +561,12 @@ public strictfp class Utility {
             marsKarboniteLoc[hit.getX()][hit.getY()] = marsAstroids.asteroid(roundNum).getKarbonite();
         }
     }
-
+    public MapLocation getCurrentRoundAsteroid(){
+        if(marsAstroids.hasAsteroid(roundNum)){
+            return marsAstroids.asteroid(roundNum).getLocation();
+        }
+        return null;
+    }
     public MapLocation findClosestGoal(Unit unit,Collection<MapLocation>goals){
         long closest = 99999;
         MapLocation best = null;
@@ -510,6 +581,7 @@ public strictfp class Utility {
         //System.out.println("FOUND CLOSEST GOAL "+best);
         return best;
     }
+
     public void enumerateOvercharges(Unit unit){
         if(overcharges.containsKey(unit.id())){
             for(Unit ally:overchargeRequests){
@@ -571,25 +643,48 @@ public strictfp class Utility {
             }
         }
     }
+    public Unit getBestHeal(Unit unit){
+        VecUnit nearby = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),ally);
+        long best = 9999;
+        Unit bestHeal = null;
+
+        for(int i=0;i<nearby.size();i++){
+            Unit toHeal = nearby.get(i);
+
+            long health = toHeal.health();
+            if(health < toHeal.maxHealth() && health < best){
+                best = health;
+                bestHeal = toHeal;
+            }
+        }
+        return bestHeal;
+    }
+
     public MapLocation priorityMine(Unit unit){
         MapLocation best = unit.location().mapLocation();
         VecMapLocation nearby = controller.allLocationsWithin(best,unit.visionRange());
 
         if(unit.location().isOnPlanet(earth.getPlanet())){
-            long bestKarbo = earthKarboniteLoc[best.getX()][best.getY()];
+            long bestKarbo = 0;
 
             for(int i=0;i<nearby.size();i++){
                 MapLocation check = nearby.get(i);
-                long checkedKarbo = earthKarboniteLoc[check.getX()][check.getY()];
-
-                if(bestKarbo < checkedKarbo){
-                    bestKarbo = checkedKarbo;
+                long amountAt = controller.karboniteAt(check);
+                if(amountAt > bestKarbo){
+                    bestKarbo = amountAt;
                     best = check;
                 }
             }
+            return best;
         }else{
             long bestKarbo = marsKarboniteLoc[best.getX()][best.getY()];
 
+            MapLocation asteroidHit = getCurrentRoundAsteroid();
+            if(asteroidHit != null){
+                if(unit.location().mapLocation().isWithinRange(unit.visionRange(),asteroidHit)){
+                    return asteroidHit;
+                }
+            }
             for(int i=0;i<nearby.size();i++){
                 MapLocation check = nearby.get(i);
                 long checkedKarbo = marsKarboniteLoc[check.getX()][check.getY()];
@@ -646,13 +741,14 @@ public strictfp class Utility {
             controller.queueResearch(UnitType.Ranger);
 
             controller.queueResearch(UnitType.Knight);
-            controller.queueResearch(UnitType.Ranger);
             controller.queueResearch(UnitType.Rocket);
+            controller.queueResearch(UnitType.Ranger);
 
             controller.queueResearch(UnitType.Knight);
             controller.queueResearch(UnitType.Healer);
             controller.queueResearch(UnitType.Ranger);
-        }else{
+            controller.queueResearch(UnitType.Knight);
+        }else if(currentStrategy == RUSH){
             controller.queueResearch(UnitType.Ranger);
             controller.queueResearch(UnitType.Mage);
             controller.queueResearch(UnitType.Mage);
@@ -662,9 +758,21 @@ public strictfp class Utility {
             controller.queueResearch(UnitType.Mage);
             controller.queueResearch(UnitType.Healer);
             controller.queueResearch(UnitType.Ranger);
+        }else{
+            controller.queueResearch(UnitType.Ranger);//speed
+            controller.queueResearch(UnitType.Ranger);//vision
+            controller.queueResearch(UnitType.Rocket);//rocket
+            controller.queueResearch(UnitType.Mage);//damage
+            controller.queueResearch(UnitType.Mage);//more damage
+            controller.queueResearch(UnitType.Ranger);//snipe
+            controller.queueResearch(UnitType.Mage);//blink
+            controller.queueResearch(UnitType.Healer);
+            controller.queueResearch(UnitType.Healer);
+            controller.queueResearch(UnitType.Healer);
         }
 
     }
+
     public void tagEnemies(Unit unit){
         VecUnit seen = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),opp);
 
@@ -730,6 +838,27 @@ public strictfp class Utility {
         }
         return best;
     }
+    public Unit closestAlly(Unit unit,UnitType type){
+        long closest = unit.visionRange();
+        Unit best;
+
+        VecUnit allies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),ally);
+
+        if(allies.size() == 0)return null;
+
+        best = allies.get(0);
+
+        for(int i=0;i<allies.size();i++){
+            if(allies.get(i).unitType() != type)continue;
+
+            long distance = unit.location().mapLocation().distanceSquaredTo(allies.get(i).location().mapLocation());
+            if(distance <= closest){
+                best = allies.get(i);
+                closest = distance;
+            }
+        }
+        return best;
+    }
 
     public boolean isPassable(MapLocation loc){
         if(loc.getPlanet() == mars.getPlanet()){
@@ -751,14 +880,13 @@ public strictfp class Utility {
                 if(!controller.canMove(unit.id(),dir)){
                     if(!controller.canMove(unit.id(),lastWorkingDirection.get(unit.id()))){
                         while (!controller.canMove(unit.id(),dir)) {
-                            if (check%3 == 0) {
-                                dir = bc.bcDirectionRotateLeft(dir);
-                            } else {
+                            if (check < 4) {
                                 dir = bc.bcDirectionRotateRight(dir);
+                            }else{
+                                dir = bc.bcDirectionRotateLeft(dir);
                             }
                             lastWorkingDirection.replace(unit.id(),dir);
-                            if (check++ == 8) {
-                                //dir = lastWorkingDirection.get(unit.id());
+                            if (check++ == 9) {
                                 return false;
                             }
                         }
@@ -775,6 +903,7 @@ public strictfp class Utility {
                 }else{
                     if(controller.isOccupiable(unit.location().mapLocation().add(dir)) != 0){
                         controller.moveRobot(unit.id(),dir);
+                        lastWorkingDirection.replace(unit.id(),dir);
                         return true;
                     }
                 }
@@ -836,7 +965,14 @@ public strictfp class Utility {
         }
         return false;
     }
-
+    public void spreadOut(Unit unit){
+        Unit ally = closesAlly(unit);
+        if(ally != null){
+            Direction away = unit.location().mapLocation().directionTo(ally.location().mapLocation());
+            MapLocation spreadOut = unit.location().mapLocation().subtract(bc.bcDirectionRotateLeft(away));
+            move(unit,spreadOut);
+        }
+    }
     public boolean build(Unit unit,Integer id){
         Unit structure = null;
 
@@ -942,11 +1078,6 @@ public strictfp class Utility {
                         return true;
                     }
 
-                    /*VecUnit workers = controller.senseNearbyUnitsByType(unit.location().mapLocation(),5,UnitType.Worker);
-                    if(karbonite > 200 && workers.size() > 3){
-                        return true;
-                    }*/
-
                     if(karbonite < 200 ){
                         if(roundNum > 200 && karbonite >= bc.bcUnitTypeBlueprintCost(UnitType.Rocket))return true;
 
@@ -966,26 +1097,34 @@ public strictfp class Utility {
         }
         return false;
     }
+
     public void setStrategy(){
         long earthArea = earth.getHeight()*earth.getWidth();
         boolean smallMap = earthArea <= 1225;
         boolean bigMap = earthArea >= 1600;
+        boolean lessPassables = numPassable < numImpassable;
+        boolean blockedSaturation = (numPassable/(numImpassable+1)) > numPassable/3;
+        boolean nextToEnemy = false;
 
-        if(smallMap){
-            currentStrategy = RUSH;
-            System.out.println("-------------------->SMALL MAP RUSHING");
-        }else{
-            boolean lessPassables = numPassable < numImpassable;
-            boolean blockedSaturation = (numPassable/(numImpassable+1)) > numPassable/3;
-            boolean nextToEnemy = false;
-
-            for(int i=0;i<earth.getInitial_units().size();i++){
-                if(goals.get(0).isWithinRange(30,allyStart)){
+        for(MapLocation myLoc:allyStartPos){
+            for(MapLocation loc:goals){
+                if(myLoc.isWithinRange(30,loc)){
                     nextToEnemy = true;
                     break;
                 }
             }
+        }
 
+        if(smallMap){
+            if(allyStartPos.size() > 1 && !nextToEnemy){
+                currentStrategy = HEAVY;
+                System.out.println("-------------------->SMALL MAP HEAVY");
+            }else{
+                currentStrategy = RUSH;
+                System.out.println("-------------------->SMALL MAP RUSHING");
+            }
+
+        }else{
             if(lessPassables || nextToEnemy || blockedSaturation){
                 currentStrategy = RUSH;
                 if(lessPassables){
@@ -997,9 +1136,14 @@ public strictfp class Utility {
                 }
             }else{
                 if(bigMap && !blockedSaturation){
-                    
+                    currentStrategy = HEAVY;
+                    if(bigMap){
+                        System.out.println("-------------------->BIG MAP HEAVY STRATEGY");
+                    }else{
+                        System.out.println("-------------------->OTHER HEAVY STRATEGY");
+                    }
                 }else{
-                    System.out.println("-------------------->NUETRAL");
+                    System.out.println("-------------------->NEUTRAL");
                     currentStrategy = NEUTRAL;
                 }
             }
@@ -1020,6 +1164,10 @@ public strictfp class Utility {
             if(earth.onMap(location) || mars.onMap(location)){
                 Direction dir =  unit.location().mapLocation().directionTo(location);
 
+                if(!unit.location().mapLocation().isAdjacentTo(location)){
+                    move(unit,location);
+                }
+
                 if(controller.canBlueprint(unit.id(),structure,dir)){
                     MapLocation loc = unit.location().mapLocation().add(dir);
 
@@ -1037,7 +1185,7 @@ public strictfp class Utility {
                         workerBuilds.get(unit.id()).offer(loc);
                     }
                     if(checkUnitExistence(location)){
-                        unbuilt.offer(controller.senseUnitAtLocation(location).id());
+                        unbuilt.add(controller.senseUnitAtLocation(location).id());
                     }
                     System.out.println(unit.id()+" blueprinted at "+loc);
                     return true;
@@ -1048,6 +1196,8 @@ public strictfp class Utility {
     }
 
     public boolean harvest(Unit unit,MapLocation location){
+        if(!unit.location().mapLocation().isWithinRange(unit.visionRange(),location))return false;
+
         if(isSafe(unit)){
             Direction dir =  unit.location().mapLocation().directionTo(location);
             if(controller.canHarvest(unit.id(),dir)){
@@ -1058,6 +1208,10 @@ public strictfp class Utility {
                     if(location.getPlanet() == earth.getPlanet()){
                         if(earth.onMap(location)){
                             earthKarboniteLoc[location.getY()][location.getY()] = controller.karboniteAt(location);
+                        }
+                    }else if(location.getPlanet() == mars.getPlanet()) {
+                        if (mars.onMap(location)) {
+                            marsKarboniteLoc[location.getY()][location.getY()] = controller.karboniteAt(location);
                         }
                     }
                 }catch(ArrayIndexOutOfBoundsException e){

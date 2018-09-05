@@ -17,6 +17,7 @@ public strictfp class Knight {
     static final int HEAVY = 4;
 
     boolean hasPathed = false;
+
     public Knight(GameController gc, Unit unit){
         controller = gc;
         this.unit = unit;
@@ -33,6 +34,7 @@ public strictfp class Knight {
                 runRush(utility);
                 break;
             case HEAVY:
+                runHeavy(utility);
                 break;
         }
     }
@@ -89,6 +91,61 @@ public strictfp class Knight {
             }
         }
     }
+    public void runHeavy(Utility utility){
+        if(!unit.location().isInGarrison() && !unit.location().isInSpace()){
+            init(utility);
+
+            VecUnit units = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.opp);
+            VecUnit allies = controller.senseNearbyUnitsByTeam(unit.location().mapLocation(),unit.visionRange(),utility.ally);
+
+            if(units.size() > 0){
+                utility.tagEnemies(unit);
+                Unit opp = utility.closestEnemy(unit);
+
+                if(opp != null){
+                    fight(opp,utility);
+                }
+            }else{
+                if(unit.location().isOnPlanet(utility.earth.getPlanet())){
+                    if(utility.attackVectors.containsKey(unit.id())){
+                        MapLocation toGo = utility.attackVectors.get(unit.id()).peek();
+                        int numAllies = 0;
+
+                        MapLocation waitingZone = unit.location().mapLocation();
+                        for(int i=0;i<allies.size();i++){
+                            Unit ally = allies.get(i);
+                            if(ally.unitType() == UnitType.Factory){
+                                waitingZone = ally.location().mapLocation();
+                            }
+                            if(ally.unitType() == UnitType.Worker || ally.unitType() == UnitType.Factory || ally.unitType() == UnitType.Rocket)continue;
+                            numAllies++;
+                        }
+
+                        if(numAllies < 4){
+                            Direction toWait = bc.bcDirectionRotateLeft(waitingZone.directionTo(unit.location().mapLocation()));
+                            waitingZone.addMultiple(toWait,9);
+                            if(!utility.move(unit,waitingZone)){
+
+                            }
+                        }else{
+                            if(utility.move(unit,toGo)){
+                                if(unit.location().mapLocation().isWithinRange(20,toGo)){
+                                    if(utility.attackVectors.get(unit.id()).contains(toGo)){
+                                        utility.attackVectors.get(unit.id()).remove();
+                                    }
+                                }
+                            }else{
+                                //utility.wander(unit);
+                            }
+                        }
+                    }
+                }else{
+                    utility.wander(unit);
+                }
+            }
+        }
+    }
+
     public void init(Utility utility){
         if(unit.health() < unit.maxHealth() && unit.health() > unit.maxHealth()/3){
             float priority = utility.healDesire(unit,utility.myHealers.size());
@@ -106,6 +163,7 @@ public strictfp class Knight {
             }
         }
     }
+
     public boolean fight(Unit enemy,Utility utility){
         if(unit.location().mapLocation().isWithinRange(unit.attackRange(),enemy.location().mapLocation())){
             if(!javelin(enemy)){
@@ -130,6 +188,7 @@ public strictfp class Knight {
         }
         return false;
     }
+
     public void findNextMove(Utility utility){
         VecUnit rockets = controller.senseNearbyUnitsByType(unit.location().mapLocation(),unit.visionRange(),UnitType.Rocket);
         if(rockets.size() > 0){
